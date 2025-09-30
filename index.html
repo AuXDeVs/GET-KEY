@@ -1,152 +1,359 @@
-let keyData = null;
-let timerInterval = null;
-
-async function init() {
-    const urlParams = new URLSearchParams(window.location.search);
-    let keyId = urlParams.get('id');
-
-    if (keyId) {
-        await loadExistingKey(keyId);
-    } else {
-        await generateNewKey();
-    }
-}
-
-async function loadExistingKey(keyId) {
-    try {
-        console.log('Loading existing key:', keyId);
-        const response = await fetch(`/api/key?id=${keyId}`);
-        const data = await response.json();
-        
-        console.log('Key data received:', data);
-
-        if (!data.valid) {
-            console.log('Key is not valid');
-            showExpired();
-            return;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Key</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
 
-        keyData = {
-            key: data.key,
-            expiresAt: data.expiresAt // Already in milliseconds
-        };
-        
-        console.log('Key data processed:', keyData);
-        displayKey();
-        startTimer();
-    } catch (error) {
-        console.error('Error loading key:', error);
-        showExpired();
-    }
-}
-
-async function generateNewKey() {
-    try {
-        console.log('Generating new key...');
-        const response = await fetch('/api/generate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ duration: 48 })
-        });
-
-        const data = await response.json();
-        console.log('Generate response:', data);
-
-        if (!data.success) {
-            console.error('Generation failed:', data);
-            showExpired();
-            return;
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #000000;
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
 
-        const newUrl = `${window.location.origin}?id=${data.id}`;
-        window.history.replaceState({}, '', newUrl);
+        .container {
+            width: 100%;
+            max-width: 500px;
+            padding: 20px;
+        }
 
-        // Convert ISO string to milliseconds
-        const expiresAt = new Date(data.expiresAt).getTime();
-        
-        keyData = {
-            key: data.key,
-            expiresAt: expiresAt
-        };
+        .card {
+            background: linear-gradient(145deg, #1a1a1a, #0d0d0d);
+            border: 1px solid #2a2a2a;
+            border-radius: 16px;
+            padding: 50px 40px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8);
+        }
 
-        console.log('Key data set:', keyData);
-        console.log('Current time:', Date.now());
-        console.log('Expires at:', expiresAt);
-        console.log('Time difference (hours):', (expiresAt - Date.now()) / (1000 * 60 * 60));
+        .key-section {
+            text-align: center;
+        }
 
-        displayKey();
-        startTimer();
-    } catch (error) {
-        console.error('Error generating key:', error);
-        showExpired();
-    }
-}
+        .key-display {
+            background: #0a0a0a;
+            border: 2px solid #3a3a3a;
+            border-radius: 12px;
+            padding: 30px 20px;
+            margin: 30px 0;
+            transition: border-color 0.3s;
+        }
 
-function displayKey() {
-    document.getElementById('loadingScreen').style.display = 'none';
-    document.getElementById('keySection').style.display = 'block';
-    document.getElementById('keyDisplay').textContent = keyData.key;
-}
+        .key-display:hover {
+            border-color: #4a4a4a;
+        }
 
-function startTimer() {
-    updateTimer();
-    timerInterval = setInterval(updateTimer, 1000);
-}
+        .key-code {
+            font-family: 'Courier New', monospace;
+            font-size: 24px;
+            color: #ffffff;
+            font-weight: 600;
+            letter-spacing: 1px;
+            word-break: break-all;
+            line-height: 1.5;
+        }
 
-function updateTimer() {
-    const now = Date.now();
-    const expiresAt = keyData.expiresAt;
-    const timeLeft = expiresAt - now;
+        .timer-box {
+            background: #0a0a0a;
+            border: 1px solid #2a2a2a;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 25px;
+        }
 
-    console.log('Timer update:', { now, expiresAt, timeLeft });
+        .timer-label {
+            font-size: 13px;
+            color: #888888;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 12px;
+        }
 
-    if (timeLeft <= 0) {
-        console.log('Timer expired');
-        clearInterval(timerInterval);
-        showExpired();
-        return;
-    }
+        .timer-value {
+            font-family: 'Courier New', monospace;
+            font-size: 42px;
+            font-weight: 700;
+            color: #ffffff;
+            letter-spacing: 2px;
+        }
 
-    const hours = Math.floor(timeLeft / (1000 * 60 * 60));
-    const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
-    const seconds = Math.floor((timeLeft % (1000 * 60)) / 1000);
+        .timer-value.warning {
+            color: #ff9800;
+        }
 
-    const timeString = `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
-    const timerEl = document.getElementById('timer');
-    timerEl.textContent = timeString;
+        .timer-value.expired {
+            color: #f44336;
+        }
 
-    if (hours < 6) {
-        timerEl.classList.add('warning');
-    }
-    if (hours < 1) {
-        timerEl.classList.add('expired');
-    }
-}
+        .copy-btn {
+            width: 100%;
+            padding: 18px;
+            background: #ffffff;
+            color: #000000;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
 
-function pad(num) {
-    return num.toString().padStart(2, '0');
-}
+        .copy-btn:hover {
+            background: #e0e0e0;
+            transform: translateY(-2px);
+        }
 
-function showExpired() {
-    document.getElementById('loadingScreen').style.display = 'none';
-    document.getElementById('keySection').style.display = 'none';
-    document.getElementById('expiredSection').style.display = 'block';
-}
+        .copy-btn:active {
+            transform: translateY(0);
+        }
 
-function copyKey() {
-    navigator.clipboard.writeText(keyData.key).then(() => {
-        const btn = document.querySelector('.copy-btn');
-        const originalText = btn.textContent;
-        btn.textContent = 'Copied!';
-        btn.style.background = '#4CAF50';
-        btn.style.color = '#ffffff';
-        
-        setTimeout(() => {
-            btn.textContent = originalText;
-            btn.style.background = '#ffffff';
-            btn.style.color = '#000000';
-        }, 2000);
-    });
-}
+        .expired-message {
+            text-align: center;
+            padding: 40px 20px;
+        }
 
-init();
+        .expired-message h2 {
+            font-size: 28px;
+            color: #f44336;
+            margin-bottom: 15px;
+        }
+
+        .expired-message p {
+            color: #888888;
+            font-size: 15px;
+            line-height: 1.6;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 60px 20px;
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #2a2a2a;
+            border-top-color: #ffffff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            color: #888888;
+            font-size: 15px;
+        }
+
+        @media (max-width: 600px) {
+            .card {
+                padding: 40px 30px;
+            }
+            
+            .key-code {
+                font-size: 20px;
+            }
+            
+            .timer-value {
+                font-size: 36px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div id="loadingScreen" class="loading">
+                <div class="loading-spinner"></div>
+                <div class="loading-text">Generating your key...</div>
+            </div>
+
+            <div id="keySection" class="key-section" style="display: none;">
+                <div class="timer-box">
+                    <div class="timer-label">Time Remaining</div>
+                    <div class="timer-value" id="timer">48:00:00</div>
+                </div>
+
+                <div class="key-display">
+                    <div class="key-code" id="keyDisplay"></div>
+                </div>
+
+                <button class="copy-btn" onclick="copyKey()">Copy Key</button>
+            </div>
+
+            <div id="expiredSection" class="expired-message" style="display: none;">
+                <h2>Key Expired</h2>
+                <p>This key has expired and is no longer valid.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let keyData = null;
+        let timerInterval = null;
+
+        async function init() {
+            const urlParams = new URLSearchParams(window.location.search);
+            let keyId = urlParams.get('id');
+
+            if (keyId) {
+                await loadExistingKey(keyId);
+            } else {
+                await generateNewKey();
+            }
+        }
+
+        async function loadExistingKey(keyId) {
+            try {
+                console.log('Loading existing key:', keyId);
+                const response = await fetch(`/api/key?id=${keyId}`);
+                const data = await response.json();
+                
+                console.log('Key data received:', data);
+
+                if (!data.valid) {
+                    console.log('Key is not valid');
+                    showExpired();
+                    return;
+                }
+
+                keyData = {
+                    key: data.key,
+                    expiresAt: data.expiresAt
+                };
+                
+                console.log('Key data processed:', keyData);
+                displayKey();
+                startTimer();
+            } catch (error) {
+                console.error('Error loading key:', error);
+                showExpired();
+            }
+        }
+
+        async function generateNewKey() {
+            try {
+                console.log('Generating new key...');
+                const response = await fetch('/api/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ duration: 48 })
+                });
+
+                const data = await response.json();
+                console.log('Generate response:', data);
+
+                if (!data.success) {
+                    console.error('Generation failed:', data);
+                    showExpired();
+                    return;
+                }
+
+                const newUrl = `${window.location.origin}?id=${data.id}`;
+                window.history.replaceState({}, '', newUrl);
+
+                const expiresAt = new Date(data.expiresAt).getTime();
+                
+                keyData = {
+                    key: data.key,
+                    expiresAt: expiresAt
+                };
+
+                console.log('Key data set:', keyData);
+                console.log('Current time:', Date.now());
+                console.log('Expires at:', expiresAt);
+                console.log('Time difference (hours):', (expiresAt - Date.now()) / (1000 * 60 * 60));
+
+                displayKey();
+                startTimer();
+            } catch (error) {
+                console.error('Error generating key:', error);
+                showExpired();
+            }
+        }
+
+        function displayKey() {
+            document.getElementById('loadingScreen').style.display = 'none';
+            document.getElementById('keySection').style.display = 'block';
+            document.getElementById('keyDisplay').textContent = keyData.key;
+        }
+
+        function startTimer() {
+            updateTimer();
+            timerInterval = setInterval(updateTimer, 1000);
+        }
+
+        function updateTimer() {
+            const now = Date.now();
+            const expiresAt = keyData.expiresAt;
+            const timeLeft = expiresAt - now;
+
+            console.log('Timer update - timeLeft:', timeLeft, 'hours:', timeLeft / (1000 * 60 * 60));
+
+            if (timeLeft <= 0) {
+                console.log('Timer expired');
+                clearInterval(timerInterval);
+                showExpired();
+                return;
+            }
+
+            const hours = Math.floor(timeLeft / (1000 * 60 * 60));
+            const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((timeLeft % (1000 * 60)) / 1000);
+
+            const timeString = `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+            const timerEl = document.getElementById('timer');
+            timerEl.textContent = timeString;
+
+            if (hours < 6) {
+                timerEl.classList.add('warning');
+            }
+            if (hours < 1) {
+                timerEl.classList.add('expired');
+            }
+        }
+
+        function pad(num) {
+            return num.toString().padStart(2, '0');
+        }
+
+        function showExpired() {
+            document.getElementById('loadingScreen').style.display = 'none';
+            document.getElementById('keySection').style.display = 'none';
+            document.getElementById('expiredSection').style.display = 'block';
+        }
+
+        function copyKey() {
+            navigator.clipboard.writeText(keyData.key).then(() => {
+                const btn = document.querySelector('.copy-btn');
+                const originalText = btn.textContent;
+                btn.textContent = 'Copied!';
+                btn.style.background = '#4CAF50';
+                btn.style.color = '#ffffff';
+                
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.style.background = '#ffffff';
+                    btn.style.color = '#000000';
+                }, 2000);
+            });
+        }
+
+        init();
+    </script>
+</body>
+</html>
